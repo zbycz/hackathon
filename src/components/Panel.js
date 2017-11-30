@@ -1,16 +1,15 @@
 import React, { Component } from 'react';
-import osmtogeojson from 'osmtogeojson';
 import leaflet from 'leaflet';
-import {get} from 'lodash';
+import { get } from 'lodash';
+import { fetchElement } from '../services/osmApi';
+import { getShortId } from '../services/osmApi';
 
-// https://medium.com/@stowball/a-dummys-guide-to-redux-and-thunk-in-react-d8904a7005d3
 
 class Panel extends Component {
     constructor() {
         super();
 
         this.submitX = this.submit.bind(this);
-
         this.state = {
             element: {},
         };
@@ -19,11 +18,12 @@ class Panel extends Component {
     componentDidMount() {
         //this.fetchOsmElement('n1601837931');
         //this.fetchOsmElement('n1601566699'); brno
-
     }
 
     submit() {
-        this.fetchOsmElement(this.inp.value);
+        //TODO sanitize input
+        this.fetchOsmElement(this.input.value);
+        return false;
     }
 
     render() {
@@ -35,8 +35,11 @@ class Panel extends Component {
         }
 
         return (
-            <div id="panel" className="App">
-                id: <input type="text" ref={(inp)=>this.inp=inp} onChange={this.submitX} />
+            <div id="panel">
+                <form onSubmit={this.submitX}>
+                    id: <input type="text" ref={inp => this.input = inp}/>
+                </form>
+                {/* TODO jak fungují form submit, atd.. */}
 
                 <h2>{get(this, 'state.element.properties.name', 'no-name')}</h2>
 
@@ -50,42 +53,22 @@ class Panel extends Component {
 
 
     fetchOsmElement(id) {
-        const type = { w: 'way', n: 'node', r: 'relation' }[id[0]];
-        const idx = id.substr(1);
-        const url = `https://www.openstreetmap.org/api/0.6/${type}/${idx}`;
+        fetchElement(id).then((element) => {
+            const feature = element.features[0];
 
+            var lon = feature.geometry.coordinates[0];
+            var lat = feature.geometry.coordinates[1];
+            this.props.map().setView([lat, lon]);
+            leaflet.marker([lat, lon]).addTo(this.props.map());
 
-        fetch(url)
-            .then((response) => {
-                if (!response.ok) {
-                    throw Error(response.statusText);
-                }
-                this.setState({ isLoading: false });
-                return response;
-            })
-            .then((response) => response.text())
-            .then(xmlStr => {
-                const xmlDom = (new window.DOMParser()).parseFromString(xmlStr, "text/xml");
-                return osmtogeojson(xmlDom);
-            })
-            .then((element) => {
-                const feature = element.features[0];
+            this.input.value = getShortId(feature.id);
 
-                var lon = feature.geometry.coordinates[0];
-                var lat = feature.geometry.coordinates[1];
-                this.props.map().setView([lat, lon]);
-                leaflet.marker([lat, lon]).addTo(this.props.map());
+            this.setState({ element: feature });
 
-
-                console.log("inp", this.inp);
-                this.inp.value = feature.id;
-
-                this.setState({ element: feature })
-            })
-            .catch((e) => {
-                console.log("er", e);
-                this.setState({ error: e })
-            });
+        }).catch((e) => {
+            console.log("er", e);
+            this.setState({ error: e })
+        });
     }
 
 }
